@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    preloadEntriesByDefault: true,
+  },
   images: {
     remotePatterns: [
       {
@@ -12,6 +15,10 @@ const nextConfig = {
         hostname: 'www.thd.tn',
       },
     ],
+  },
+  onDemandEntries: {
+    maxInactiveAge: 60 * 1000,
+    pagesBufferLength: 5,
   },
 }
 
