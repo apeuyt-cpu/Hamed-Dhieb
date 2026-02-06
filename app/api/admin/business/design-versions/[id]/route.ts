@@ -147,7 +147,7 @@ export async function PUT(
         .neq('id', id)
     }
     
-    const updateData: any = {
+    const updateData: Record<string, any> = {
       updated_at: new Date().toISOString()
     }
     if (name !== undefined) updateData.name = name
@@ -203,7 +203,7 @@ export async function DELETE(
       .select('id, is_active')
       .eq('id', id)
       .eq('business_id', business.id)
-      .single()
+      .single() as { data: { id: string; is_active: boolean } | null }
     
     if (!existing) {
       return NextResponse.json({ error: 'Design not found' }, { status: 404 })
