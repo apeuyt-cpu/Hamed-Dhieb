@@ -4,9 +4,10 @@ import { createServiceRoleClient } from '@/lib/supabase/server'
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const resolvedParams = await params
     await requireSuperAdmin()
     
     const supabase = await createServiceRoleClient()
@@ -15,7 +16,7 @@ export async function DELETE(
     const { data: business, error: fetchError } = await (supabase
       .from('businesses') as any)
       .select('id, logo_url, owner_id')
-      .eq('id', params.id)
+      .eq('id', resolvedParams.id)
       .single()
 
     if (fetchError) {
@@ -68,7 +69,7 @@ export async function DELETE(
     const { error: deleteError } = await (supabase
       .from('businesses') as any)
       .delete()
-      .eq('id', params.id)
+      .eq('id', resolvedParams.id)
 
     if (deleteError) {
       return NextResponse.json(

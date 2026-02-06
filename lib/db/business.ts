@@ -277,7 +277,10 @@ export async function getAllBusinesses() {
       if (dsError) {
         console.warn('[getAllBusinesses] Failed to fetch design_selections:', dsError)
       } else if (dsRows) {
-        const dsMap = new Map((dsRows as any[]).map((r: any) => [r.business_id, r]))
+        const dsMap: Map<string, any> = new Map()
+        for (const row of dsRows as any[]) {
+          dsMap.set(row.business_id, row)
+        }
         (data as any[]).forEach((b: any) => {
           const ds = dsMap.get(b.id)
           b.design_selection = ds ? { design_type: ds.design_type, description: ds.description } : null
@@ -301,7 +304,7 @@ export async function getAllBusinesses() {
             console.warn('[getAllBusinesses] Service role not available for design_selections insert, using regular client')
           }
           
-          const { error: insertError } = await insertSupabase
+          const { error: insertError } = await (insertSupabase as any)
             .from('design_selections')
             .insert(insertData)
           
@@ -362,18 +365,18 @@ export async function getBusinessDesignForDisplay(businessId: string) {
   }
   
   // If there's a QR-linked design version, fetch it
-  if (business.qr_design_version_id) {
+  if ((business as any).qr_design_version_id) {
     const { data: designVersion } = await supabase
       .from('design_versions')
       .select('design')
-      .eq('id', business.qr_design_version_id)
+      .eq('id', (business as any).qr_design_version_id)
       .single()
     
-    if (designVersion && designVersion.design) {
-      return designVersion.design
+    if (designVersion && (designVersion as any).design) {
+      return (designVersion as any).design
     }
   }
   
   // Otherwise, return the business's design column
-  return business.design
+  return (business as any).design
 }

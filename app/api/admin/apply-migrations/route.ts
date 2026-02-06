@@ -64,7 +64,7 @@ export async function POST() {
     // We'll use the exec_sql RPC function if it exists, otherwise create it
     try {
       // Try direct execution via RPC
-      const { error: rpcError, data: rpcData } = await supabase.rpc('exec_sql', {
+      const { error: rpcError, data: rpcData } = await (supabase as any).rpc('exec_sql', {
         sql: sqlContent
       })
       
@@ -81,7 +81,7 @@ export async function POST() {
           .filter(s => s.length > 0 && !s.startsWith('--'))
         
         // Create the extension
-        const { error: extError } = await supabase.rpc('exec', {
+        const { error: extError } = await (supabase as any).rpc('exec', {
           sql: 'CREATE EXTENSION IF NOT EXISTS "pgcrypto"'
         }).catch(() => ({ error: null })) // Ignore if function doesn't exist
         
@@ -90,7 +90,7 @@ export async function POST() {
           .find(s => s.toUpperCase().startsWith('CREATE TABLE'))
         
         if (createTableStmt) {
-          const { error: createError } = await supabase.rpc('exec', {
+          const { error: createError } = await (supabase as any).rpc('exec', {
             sql: createTableStmt
           }).catch(() => ({ error: null }))
         }

@@ -37,15 +37,16 @@ function validateId(id: any): { valid: boolean; error?: string } {
 // GET a specific design version
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const resolvedParams = await params
     console.log('[GET /design-versions/[id]] Request received')
-    console.log('[GET] Raw params:', params)
-    console.log('[GET] params.id:', params.id)
-    console.log('[GET] typeof params.id:', typeof params.id)
+    console.log('[GET] Raw params:', resolvedParams)
+    console.log('[GET] params.id:', resolvedParams.id)
+    console.log('[GET] typeof params.id:', typeof resolvedParams.id)
     
-    const idValidation = validateId(params.id)
+    const idValidation = validateId(resolvedParams.id)
     if (!idValidation.valid) {
       console.log('[GET] ID validation failed, returning 400')
       return NextResponse.json(
@@ -54,7 +55,7 @@ export async function GET(
       )
     }
     
-    const id = params.id
+    const id = resolvedParams.id
     
     const { user } = await requireOwner()
     
@@ -103,10 +104,11 @@ export async function GET(
 // PUT - Update a design version
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const idValidation = validateId(params.id)
+    const resolvedParams = await params
+    const idValidation = validateId(resolvedParams.id)
     if (!idValidation.valid) {
       return NextResponse.json(
         { error: idValidation.error },
@@ -114,7 +116,7 @@ export async function PUT(
       )
     }
     
-    const id = params.id
+    const id = resolvedParams.id
     const { user } = await requireOwner()
     const body = await request.json()
     const { name, description, design, setAsActive } = body
@@ -140,8 +142,7 @@ export async function PUT(
     
     // If setAsActive is true, deactivate other designs
     if (setAsActive) {
-      await supabase
-        .from('design_versions')
+      await (supabase.from('design_versions') as any)
         .update({ is_active: false })
         .eq('business_id', business.id)
         .neq('id', id)
@@ -155,8 +156,7 @@ export async function PUT(
     if (design !== undefined) updateData.design = design
     if (setAsActive !== undefined) updateData.is_active = setAsActive
     
-    const { data, error } = await supabase
-      .from('design_versions')
+    const { data, error } = await (supabase.from('design_versions') as any)
       .update(updateData)
       .eq('id', id)
       .select()
@@ -176,10 +176,11 @@ export async function PUT(
 // DELETE - Delete a design version
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const idValidation = validateId(params.id)
+    const resolvedParams = await params
+    const idValidation = validateId(resolvedParams.id)
     if (!idValidation.valid) {
       return NextResponse.json(
         { error: idValidation.error },
@@ -187,7 +188,7 @@ export async function DELETE(
       )
     }
     
-    const id = params.id
+    const id = resolvedParams.id
     const { user } = await requireOwner()
     
     const business = await getBusinessByOwner(user.id)

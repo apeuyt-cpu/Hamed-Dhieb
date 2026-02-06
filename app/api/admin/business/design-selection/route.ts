@@ -16,7 +16,7 @@ export async function GET() {
     const supabase = await createServerClient()
     
     // Get design selection for this business
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('design_selections')
       .select('design_type')
       .eq('business_id', business.id)

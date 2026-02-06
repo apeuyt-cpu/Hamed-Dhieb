@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     if (data && data.id) {
       try {
         // Create a design version with auto-generated name
-        const { data: designVersion } = await supabase
+        const { data: designVersion } = await (supabase as any)
           .from('design_versions')
           .insert({
             business_id: data.id,

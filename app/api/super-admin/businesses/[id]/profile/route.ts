@@ -4,9 +4,10 @@ import { createServiceRoleClient } from '@/lib/supabase/server'
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const resolvedParams = await params
     await requireSuperAdmin()
     
     const { email, phone_number } = await request.json()
@@ -24,7 +25,7 @@ export async function PATCH(
     const { data: business, error: businessError } = await (supabase
       .from('businesses') as any)
       .select('owner_id')
-      .eq('id', params.id)
+      .eq('id', resolvedParams.id)
       .single()
     
     if (businessError || !business) {

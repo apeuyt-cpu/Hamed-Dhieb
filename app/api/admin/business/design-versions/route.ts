@@ -67,13 +67,13 @@ export async function POST(request: Request) {
     
     // If setAsActive is true, deactivate other designs
     if (setAsActive) {
-      await supabase
+      await (supabase as any)
         .from('design_versions')
         .update({ is_active: false })
         .eq('business_id', business.id)
     }
     
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('design_versions')
       .insert({
         business_id: business.id,

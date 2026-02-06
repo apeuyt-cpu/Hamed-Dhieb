@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     }
     
     // Update the business's QR code design version
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('businesses')
       .update({ qr_design_version_id: designVersionId })
       .eq('id', business.id)
@@ -66,14 +66,14 @@ export async function GET() {
     
     const supabase = await createServerClient()
     
-    if (business.qr_design_version_id) {
-      const { data: design } = await supabase
+    if ((business as any).qr_design_version_id) {
+      const { data: design } = await (supabase as any)
         .from('design_versions')
         .select('*')
-        .eq('id', business.qr_design_version_id)
+        .eq('id', (business as any).qr_design_version_id)
         .single()
       
-      return NextResponse.json({ designVersionId: business.qr_design_version_id, design })
+      return NextResponse.json({ designVersionId: (business as any).qr_design_version_id, design })
     }
     
     return NextResponse.json({ designVersionId: null })
