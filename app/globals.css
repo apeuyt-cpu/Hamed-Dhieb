@@ -1,0 +1,113 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;500;600&family=Source+Sans+Pro:wght@300;400;600&family=Cinzel:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Arabic Font */
+
+/* Other Fonts */
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+}
+
+/* Arabic font for admin pages */
+.admin-page,
+.admin-sidebar,
+.menu-page,
+.super-admin-page {
+  font-family: 'Cairo', 'DM Sans', system-ui, sans-serif;
+}
+
+/* Minimal theme styles */
+.minimal-container {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.minimal-fade {
+  animation: minFade 0.4s ease-out forwards;
+  opacity: 0;
+}
+
+@keyframes minFade {
+  from { 
+    opacity: 0; 
+    transform: translateY(8px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
+  }
+}
+
+.minimal-item {
+  transition: all 0.2s ease;
+}
+
+.minimal-item:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.minimal-item:active {
+  transform: scale(0.99);
+}
+
+.item-expand {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.category-tab {
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.category-tab::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: currentColor;
+  transform: scaleX(0);
+  transition: transform 0.2s ease;
+}
+
+.category-tab.active::after {
+  transform: scaleX(1);
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #ddd;
+  border-radius: 2px;
+}
+
+@media (max-width: 768px) {
+  .mobile-scroll::-webkit-scrollbar {
+    display: none;
+  }
+}
