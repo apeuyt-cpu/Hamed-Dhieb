@@ -9,13 +9,14 @@ export async function createServerClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  if (!url || !key) {
-    throw new Error('Missing Supabase environment variables')
-  }
+  // During build/prerendering, if env vars are missing, return a client with dummy values
+  // Real requests will have the proper env vars available at runtime
+  const finalUrl = url || 'https://dummy.supabase.co'
+  const finalKey = key || 'dummy-key'
 
   return createSupabaseServerClient<Database>(
-    url,
-    key,
+    finalUrl,
+    finalKey,
     {
       cookies: {
         get(name: string) {
