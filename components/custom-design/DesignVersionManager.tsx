@@ -55,24 +55,14 @@ export default function DesignVersionManager({
         throw new Error(errMsg)
       }
       const data = await res.json()
-      console.log('=== fetchDesigns: Raw API response ===', data)
-      
       // Ensure all designs have valid IDs
       const designsWithIds = (data.designs || []).filter((design: any, index: number) => {
-        console.log(`Design ${index}:`, design)
-        console.log(`Design ${index} - id:`, design.id)
-        console.log(`Design ${index} - id type:`, typeof design.id)
-        console.log(`Design ${index} - has id:`, !!design.id)
-        
         if (!design.id) {
-          console.warn(`Design ${index} missing ID:`, design)
+          console.warn(`Design ${index} missing ID`)
           return false
         }
         return true
       })
-      
-      console.log('=== fetchDesigns: After filtering ===', designsWithIds)
-      console.log('=== fetchDesigns: Setting state with designs count ===', designsWithIds.length)
       setDesigns(designsWithIds as DesignVersion[])
     } catch (err) {
       console.error('fetchDesigns error:', err)
@@ -148,10 +138,7 @@ export default function DesignVersionManager({
   }
 
   const handleLoadDesign = async (designId: string) => {
-    console.log('=== handleLoadDesign START ===')
-    console.log('designId parameter:', designId)
-    console.log('designId type:', typeof designId)
-    console.log('designId is nullish:', !designId)
+    // handleLoadDesign start
     
     try {
       // Validate designId before making the request
@@ -162,28 +149,22 @@ export default function DesignVersionManager({
       }
       
       const url = `/api/admin/business/design-versions/${designId}`
-      console.log('Fetching from URL:', url)
-      
       const res = await fetch(url)
-      console.log('API Response status:', res.status)
-      console.log('API Response ok:', res.ok)
       
       if (!res.ok) {
         let errMsg = 'Failed to load design'
         let errData = null
         try {
           errData = await res.json()
-          console.log('API Error response body:', errData)
           errMsg = errData?.error || errMsg
         } catch (parseErr) {
           console.error('Failed to parse error response:', parseErr)
-          console.error('Raw response:', res)
         }
         throw new Error(errMsg)
       }
       
       const data = await res.json()
-      console.log('API Response data:', data)
+      // API Response data fetched
       
       // Validate the response structure
       if (!data.design) {
@@ -192,7 +173,7 @@ export default function DesignVersionManager({
       
       // Extract the actual design object
       const designData = data.design.design || data.design
-      console.log('Design data to load:', designData)
+      // designData validated
       
       if (!designData || typeof designData !== 'object') {
         throw new Error('Invalid design data format')
@@ -202,7 +183,7 @@ export default function DesignVersionManager({
       
       setSuccessMessage('تم تحميل التصميم بنجاح')
       setTimeout(() => setSuccessMessage(null), 3000)
-      console.log('=== handleLoadDesign SUCCESS ===')
+      // handleLoadDesign success
     } catch (err: any) {
       console.error('=== handleLoadDesign ERROR ===')
       console.error('Error:', err)
@@ -428,8 +409,7 @@ export default function DesignVersionManager({
       ) : (
         <div className="space-y-2 max-h-96 overflow-auto">
           {designs.map((design, mapIndex) => {
-            console.log(`=== Rendering design ${mapIndex} ===`, design)
-            console.log(`Design ${mapIndex} has id:`, !!design.id, 'value:', design.id)
+            // rendering design
             return (
             <div key={design.id || `design-${mapIndex}`} className="flex items-center justify-between p-3 border rounded hover:bg-gray-50">
               <div className="flex-1">
@@ -450,12 +430,7 @@ export default function DesignVersionManager({
               <div className="flex gap-1 ml-2">
                 <button
                   onClick={() => {
-                    console.log('=== LOAD BUTTON CLICKED ===')
-                    console.log('design object:', design)
-                    console.log('design keys:', Object.keys(design))
-                    console.log('design.id:', design.id)
-                    console.log('design.id type:', typeof design.id)
-                    console.log('All design values:', JSON.stringify(design))
+                    // load button clicked
                     handleLoadDesign(design.id)
                   }}
                   className="px-2 py-1 bg-blue-50 text-blue-600 rounded text-xs hover:bg-blue-100"

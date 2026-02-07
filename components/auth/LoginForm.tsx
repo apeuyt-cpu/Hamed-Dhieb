@@ -35,7 +35,6 @@ export default function LoginForm() {
             .maybeSingle() as { data: { role: string } | null }
           
           const redirectUrl = profile?.role === 'super_admin' ? '/super-admin' : '/admin'
-          console.log('[LoginForm] User already authenticated, redirecting to', redirectUrl)
           window.location.replace(redirectUrl)
         }
       } catch {
@@ -178,7 +177,7 @@ export default function LoginForm() {
         return
       }
 
-      console.log('[LoginForm] Login successful, user:', data.user.id)
+      // Login successful
 
       // Get user profile to determine correct redirect URL
       const { data: profile, error: profileError } = await supabase
@@ -188,7 +187,7 @@ export default function LoginForm() {
         .maybeSingle() as { data: { role: string } | null, error: any }
 
       if (profileError) {
-        console.error('[LoginForm] Profile fetch error:', profileError)
+        console.error('Profile fetch error:', profileError)
       }
 
       // Determine redirect URL based on role
@@ -205,7 +204,7 @@ export default function LoginForm() {
         redirectUrl = '/admin'
       }
 
-      console.log('[LoginForm] Redirecting to', redirectUrl, 'Role:', profile?.role)
+      // Redirecting
       
       // Use router.push for client-side navigation - cookies are already set by Supabase SSR
       router.push(redirectUrl)

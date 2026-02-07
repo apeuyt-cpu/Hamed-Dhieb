@@ -73,8 +73,7 @@ export default function SignupForm() {
     }
 
     try {
-      // Debug: log envs to detect missing vars
-      console.debug('[Supabase Debug] URL:', process.env.NEXT_PUBLIC_SUPABASE_URL, 'ANON present:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+      // Removed verbose debug logs for production
       
       // Verify Supabase is initialized
       if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
@@ -88,7 +87,7 @@ export default function SignupForm() {
       let authData: any = null
       let authError: any = null
       try {
-        console.debug('[Signup] Attempting to sign up with email:', email)
+        // Attempting to sign up
         const result = await supabase.auth.signUp({
           email,
           password,
@@ -102,9 +101,9 @@ export default function SignupForm() {
         })
         authData = result.data
         authError = result.error
-        console.debug('[Signup] signUp response:', { hasUser: !!result.data?.user, error: result.error })
+        // signUp response received
       } catch (fetchErr: any) {
-        console.error('[Signup] signUp fetch error:', fetchErr)
+        console.error('signUp fetch error:', fetchErr)
         const errorMsg = fetchErr?.message || fetchErr?.toString() || 'Unknown error'
         setError(`فشل إنشاء الحساب: ${errorMsg}. تحقق من وحدة تحكم الشبكة (Network tab).`)
         setLoading(false)
@@ -113,7 +112,7 @@ export default function SignupForm() {
 
       if (authError || !authData?.user) {
         const errorMsg = authError?.message || 'فشل إنشاء حساب المستخدم'
-        console.error('[Signup] Auth error:', authError)
+        console.error('Auth error:', authError)
         setError(errorMsg)
         setLoading(false)
         return
@@ -123,7 +122,7 @@ export default function SignupForm() {
 
       // If local testing is enabled, skip database writes (profiles/businesses)
       if (localTesting) {
-        console.log('[SignupForm] Local testing enabled - skipping profile and business creation')
+        // Local testing enabled - skipping profile and business creation
         // Redirect to admin menu (editor will open if user chose custom design)
         window.location.href = '/admin/menu'
         return
@@ -146,11 +145,11 @@ export default function SignupForm() {
           }
           
           if (profileError && profileError.code !== 'PGRST116') {
-            console.warn('[Signup] Profile query error:', profileError)
+            console.warn('Profile query error:', profileError)
           }
         }
       } catch (err) {
-        console.error('[Signup] Error waiting for profile:', err)
+        console.error('Error waiting for profile:', err)
       }
 
       // Step 3: Ensure profile exists and has email/phone
@@ -166,7 +165,7 @@ export default function SignupForm() {
             })
           
           if (profileError) {
-            console.error('[Signup] Profile insert error:', profileError)
+            console.error('Profile insert error:', profileError)
             setError('فشل إنشاء الملف الشخصي. يرجى المحاولة مرة أخرى.')
             setLoading(false)
             return
@@ -182,11 +181,11 @@ export default function SignupForm() {
             .eq('user_id', userId)
           
           if (updateError) {
-            console.warn('[Signup] Error updating profile:', updateError)
+            console.warn('Error updating profile:', updateError)
           }
         }
       } catch (err) {
-        console.error('[Signup] Profile creation/update error:', err)
+        console.error('Profile creation/update error:', err)
       }
 
       // Step 4: Create business with 7-day free trial
@@ -209,7 +208,7 @@ export default function SignupForm() {
           .single()
 
         if (businessError) {
-          console.error('[Signup] Business creation error:', businessError)
+          console.error('Business creation error:', businessError)
           if (businessError.code === '23505') {
             setError('اسم النشاط التجاري مستخدم بالفعل. تم إنشاء الحساب ولكن فشل إعداد النشاط. يرجى المحاولة لاحقاً.')
           } else {
@@ -233,23 +232,23 @@ export default function SignupForm() {
 
             const { error: dsError } = await (supabase.from('design_selections') as any).insert(dsPayload)
             if (dsError) {
-              console.warn('[Signup] Failed to insert design_selections row:', dsError)
+              console.warn('Failed to insert design_selections row:', dsError)
             }
           }
         } catch (err) {
-          console.warn('[Signup] Error creating design_selections row:', err)
+          console.warn('Error creating design_selections row:', err)
         }
 
         // Success! Redirect to admin menu
-        console.log('[Signup] User signup completed successfully')
+        // User signup completed successfully
         window.location.href = '/admin/menu'
       } catch (err: any) {
-        console.error('[Signup] Business creation step error:', err)
+        console.error('Business creation step error:', err)
         setError(err?.message || 'حدث خطأ أثناء إنشاء النشاط التجاري. يرجى المحاولة مرة أخرى.')
         setLoading(false)
       }
     } catch (err: any) {
-      console.error('[Signup] Outer catch error:', err)
+      console.error('Outer catch error:', err)
       setError(err?.message || 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.')
       setLoading(false)
     }
