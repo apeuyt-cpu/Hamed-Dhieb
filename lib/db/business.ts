@@ -17,7 +17,23 @@ export async function getBusinessBySlug(slug: string): Promise<Business | null> 
       .in('status', ['active', 'paused'])
       .maybeSingle()
     
-    if (error) {
+    if (error || !data) {
+      // Fallback: sometimes the server client may not return data due to runtime
+      // request context. Try the Supabase REST API directly using the public anon key.
+      try {
+        const SUPA_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+        const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+        if (SUPA_URL && ANON) {
+          const url = `${SUPA_URL.replace(/\/$/, '')}/rest/v1/businesses?slug=eq.${encodeURIComponent(slug)}&select=id,owner_id,name,slug,theme_id,status,logo_url,expires_at,primary_color,design,qr_design_version_id`
+          const resp = await fetch(url, { headers: { apikey: ANON, Authorization: `Bearer ${ANON}` } })
+          if (resp.ok) {
+            const arr = await resp.json()
+            if (Array.isArray(arr) && arr.length > 0) return arr[0] as any
+          }
+        }
+      } catch (e) {
+        // ignore fallback errors
+      }
       return null
     }
     return data
