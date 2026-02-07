@@ -106,7 +106,33 @@ export default function DesignVersionManager({
         throw new Error(data.error || 'Failed to save design')
       }
 
-      setSuccessMessage('تم حفظ التصميم بنجاح')
+      const saved = await res.json()
+
+      // After saving the design, automatically link it to the QR code
+      try {
+        const designId = saved?.design?.id || saved?.design?.id
+        if (designId) {
+          const linkRes = await fetch('/api/admin/business/qr-link-design', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ designVersionId: designId }),
+          })
+
+          if (!linkRes.ok) {
+            const linkErr = await linkRes.json().catch(() => ({}))
+            console.warn('Auto-link to QR failed:', linkErr)
+            setSuccessMessage('تم حفظ التصميم بنجاح')
+          } else {
+            setSuccessMessage('تم حفظ التصميم وربطه برمز QR بنجاح')
+          }
+        } else {
+          setSuccessMessage('تم حفظ التصميم بنجاح')
+        }
+      } catch (linkErr: any) {
+        console.error('Auto-link error:', linkErr)
+        setSuccessMessage('تم حفظ التصميم بنجاح')
+      }
+
       setSaveDialogName('')
       setSaveDialogDescription('')
       setSetAsActive(false)
