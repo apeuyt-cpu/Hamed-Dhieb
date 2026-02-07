@@ -34,17 +34,32 @@ export async function POST(request: Request) {
     }
     
     // Update the business's QR code design version
+    // Fetch the design payload so we can also persist it to the business record
+    const { data: dvData, error: dvError } = await (supabase as any)
+      .from('design_versions')
+      .select('design')
+      .eq('id', designVersionId)
+      .single()
+
+    if (dvError) {
+      // If the design version can't be fetched, log and continue — linking should still set the id
+      console.warn('Failed to fetch design version for embedding into business.design:', dvError)
+    }
+
+    const updatePayload: any = { qr_design_version_id: designVersionId }
+    if (dvData && dvData.design) updatePayload.design = dvData.design
+
     const { data, error } = await (supabase as any)
       .from('businesses')
-      .update({ qr_design_version_id: designVersionId })
+      .update(updatePayload)
       .eq('id', business.id)
       .select()
       .single()
-    
+
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
-    
+
     return NextResponse.json({ success: true, business: data })
   } catch (err: any) {
     if (err?.digest?.startsWith('NEXT_REDIRECT')) {
