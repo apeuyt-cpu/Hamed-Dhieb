@@ -46,7 +46,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
-      <body suppressHydrationWarning>{children}</body>
+      <body id="scaniha-root" suppressHydrationWarning>{children}</body>
     </html>
   )
 }
