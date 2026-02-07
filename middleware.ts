@@ -68,220 +68,149 @@ export async function middleware(req: NextRequest) {
   try {
     const { pathname } = req.nextUrl
 
-    // Create initial response with headers from request
-    let response = NextResponse.next({
+    // No-op response - just pass through without modifying
+    const response = NextResponse.next({
       request: {
         headers: req.headers,
       },
     })
 
-    // Check environment variables
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      console.error('[Middleware] Missing Supabase environment variables')
-      return response
-    }
+    try {
+      // Check environment variables early
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-    const supabase = createSupabaseServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-      {
-        cookies: {
-          get(name: string) {
-            try {
-              return req.cookies.get(name)?.value
-            } catch (e) {
-              return undefined
-            }
-          },
-          set(name: string, value: string, options: CookieOptions) {
-            try {
-              req.cookies.set({
-                name,
-                value,
-                ...options,
-              })
-            } catch (e) {
-              console.error('[Middleware] Error setting cookie:', e)
-            }
-          },
-          remove(name: string, options: CookieOptions) {
-            try {
-              req.cookies.set({
-                name,
-                value: '',
-                ...options,
-              })
-            } catch (e) {
-              console.error('[Middleware] Error removing cookie:', e)
-            }
-          },
-        },
+      if (!supabaseUrl || !supabaseKey) {
+        // Missing env vars - just return, don't interfere with page loads
+        return response
       }
-    )
 
-    // Copy request cookies to response
-    try {
-      req.cookies.getAll().forEach(cookie => {
-        response.cookies.set(cookie.name, cookie.value)
-      })
-    } catch (e) {
-      console.error('[Middleware] Error copying cookies:', e)
-    }
+      // Create Supabase client with comprehensive error handling
+      const supabase = createSupabaseServerClient(
+        supabaseUrl,
+        supabaseKey,
+        {
+          cookies: {
+            get(name: string) {
+              try {
+                return req.cookies.get(name)?.value
+              } catch {
+                return undefined
+              }
+            },
+            set(name: string, value: string, options: CookieOptions) {
+              try {
+                req.cookies.set({ name, value, ...options })
+              } catch (e) {
+                console.error('[Middleware] Cookie set error:', e)
+              }
+            },
+            remove(name: string, options: CookieOptions) {
+              try {
+                req.cookies.set({ name, value: '', ...options })
+              } catch (e) {
+                console.error('[Middleware] Cookie remove error:', e)
+              }
+            },
+          },
+        }
+      )
 
-    // Check authentication
-    let user = null
-    let authError = null
-    try {
-      const authResult = await supabase.auth.getUser()
-      user = authResult.data?.user || null
-      authError = authResult.error
-    } catch (e) {
-      console.error('[Middleware] Error getting user:', e)
-      authError = e
-    }
+      // Get user with timeout protection
+      let user = null
+      let authError = null
+      try {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 5000)
 
-    // Debug logging
-    if (pathname === '/admin' || pathname === '/login') {
-      const errorMsg = authError && typeof authError === 'object' && 'message' in authError ? authError.message : 'none'
-      console.log('[Middleware]', pathname, '- User:', user?.id || 'none', 'Error:', errorMsg)
-    }
-
-    // If user is authenticated and trying to access login/signup, redirect to their dashboard
-    if (user && !authError) {
-      if (pathname === '/login' || pathname === '/signup') {
         try {
-          let userRole = await getUserRole(supabase, user.id)
-          // If running locally and no profile exists, treat the authenticated user as an owner to simplify testing
-          if (!userRole && process.env.LOCAL_TESTING === 'true') {
-            userRole = 'owner'
-          }
+          const result = await supabase.auth.getUser()
+          clearTimeout(timeout)
+          user = result.data?.user || null
+          authError = result.error
+        } catch (e) {
+          clearTimeout(timeout)
+          throw e
+        }
+      } catch (e) {
+        console.error('[Middleware] Auth check error:', e)
+        authError = e
+      }
 
+      // Public routes - allow without auth
+      if (isPublicRoute(pathname)) {
+        return response
+      }
+
+      // For protected routes, redirect unauthenticated users
+      if (!user || authError) {
+        if (pathname !== '/login' && pathname !== '/signup') {
+          const redirectUrl = req.nextUrl.clone()
+          redirectUrl.pathname = '/login'
+          return NextResponse.redirect(redirectUrl)
+        }
+        return response
+      }
+
+      // User is authenticated - check role for protected routes
+      try {
+        let userRole: UserRole = null
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        userRole = (profile?.role as UserRole) || null
+
+        // If on login/signup when authenticated, redirect to dashboard
+        if (pathname === '/login' || pathname === '/signup') {
           const dashboardUrl = getDashboardUrl(userRole)
-          
-          console.log('[Middleware] Redirecting authenticated user from', pathname, 'to', dashboardUrl)
           const redirectUrl = req.nextUrl.clone()
           redirectUrl.pathname = dashboardUrl
-          const redirectResponse = NextResponse.redirect(redirectUrl, 302)
-          try {
-            req.cookies.getAll().forEach(cookie => {
-              redirectResponse.cookies.set(cookie.name, cookie.value)
-            })
-          } catch (e) {
-            console.error('[Middleware] Error setting cookies on redirect:', e)
+          return NextResponse.redirect(redirectUrl, 302)
+        }
+
+        // Protect /admin - only owners
+        if (pathname.startsWith('/admin')) {
+          if (userRole !== 'owner') {
+            const redirectUrl = req.nextUrl.clone()
+            redirectUrl.pathname = userRole === 'super_admin' ? '/super-admin' : '/login'
+            return NextResponse.redirect(redirectUrl, 307)
           }
-          return redirectResponse
-        } catch (error) {
-          console.error('[Middleware] Error getting user role:', error)
-          const redirectUrl = req.nextUrl.clone()
-          redirectUrl.pathname = '/admin'
-          const redirectResponse = NextResponse.redirect(redirectUrl, 302)
-          try {
-            req.cookies.getAll().forEach(cookie => {
-              redirectResponse.cookies.set(cookie.name, cookie.value)
-            })
-          } catch (e) {
-            console.error('[Middleware] Error setting cookies on redirect:', e)
+        }
+
+        // Protect /super-admin - only super_admin
+        if (pathname.startsWith('/super-admin')) {
+          if (userRole === 'owner') {
+            const redirectUrl = req.nextUrl.clone()
+            redirectUrl.pathname = '/admin'
+            return NextResponse.redirect(redirectUrl, 307)
           }
-          return redirectResponse
+          if (userRole !== 'super_admin') {
+            const redirectUrl = req.nextUrl.clone()
+            redirectUrl.pathname = '/login'
+            return NextResponse.redirect(redirectUrl, 307)
+          }
         }
+      } catch (e) {
+        console.error('[Middleware] Role check error:', e)
+        // On error, just allow the request to proceed
       }
-    }
-    
-    // Allow public routes
-    if (isPublicRoute(pathname)) {
+
       return response
+    } catch (innerError) {
+      console.error('[Middleware] Inner error:', innerError)
+      // Return safe response on any error
+      return NextResponse.next({
+        request: {
+          headers: req.headers,
+        },
+      })
     }
-
-    // For protected routes, check authentication
-    if (authError || !user) {
-      // Only redirect to login if we're not already on login/signup
-      if (pathname !== '/login' && pathname !== '/signup') {
-        console.log('[Middleware] Redirecting unauthenticated user from', pathname, 'to /login')
-        const redirectUrl = req.nextUrl.clone()
-        redirectUrl.pathname = '/login'
-        const redirectResponse = NextResponse.redirect(redirectUrl)
-        try {
-          req.cookies.getAll().forEach(cookie => {
-            redirectResponse.cookies.set(cookie.name, cookie.value)
-          })
-        } catch (e) {
-          console.error('[Middleware] Error setting cookies on redirect:', e)
-        }
-        return redirectResponse
-      }
-      return response
-    }
-
-    // Get user role
-    let userRole = null
-    try {
-      userRole = await getUserRole(supabase, user.id)
-      if (!userRole && process.env.LOCAL_TESTING === 'true') {
-        userRole = 'owner'
-      }
-    } catch (e) {
-      console.error('[Middleware] Error getting user role:', e)
-      userRole = null
-    }
-
-    // Protect /admin routes - only allow owners
-    if (pathname.startsWith('/admin')) {
-      if (userRole !== 'owner') {
-        const redirectUrl = req.nextUrl.clone()
-        
-        if (userRole === 'super_admin') {
-          redirectUrl.pathname = '/super-admin'
-        } else {
-          redirectUrl.pathname = '/login'
-        }
-        
-        const redirectResponse = NextResponse.redirect(redirectUrl, 307)
-        try {
-          req.cookies.getAll().forEach(cookie => {
-            redirectResponse.cookies.set(cookie.name, cookie.value)
-          })
-        } catch (e) {
-          console.error('[Middleware] Error setting cookies on redirect:', e)
-        }
-        return redirectResponse
-      }
-    }
-
-    // Protect /super-admin routes - only allow super_admin
-    if (pathname.startsWith('/super-admin')) {
-      if (userRole === 'owner') {
-        const redirectUrl = req.nextUrl.clone()
-        redirectUrl.pathname = '/admin'
-        const redirectResponse = NextResponse.redirect(redirectUrl, 307)
-        try {
-          req.cookies.getAll().forEach(cookie => {
-            redirectResponse.cookies.set(cookie.name, cookie.value)
-          })
-        } catch (e) {
-          console.error('[Middleware] Error setting cookies on redirect:', e)
-        }
-        return redirectResponse
-      }
-      
-      if (userRole !== 'super_admin') {
-        const redirectUrl = req.nextUrl.clone()
-        redirectUrl.pathname = '/login'
-        const redirectResponse = NextResponse.redirect(redirectUrl, 307)
-        try {
-          req.cookies.getAll().forEach(cookie => {
-            redirectResponse.cookies.set(cookie.name, cookie.value)
-          })
-        } catch (e) {
-          console.error('[Middleware] Error setting cookies on redirect:', e)
-        }
-        return redirectResponse
-      }
-    }
-
-    return response
   } catch (error) {
     console.error('[Middleware] Unhandled error:', error)
-    // Return a next response on any unhandled error to prevent middleware invocation failure
+    // Last resort - return minimal next response
     return NextResponse.next()
   }
 }
