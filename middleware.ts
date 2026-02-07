@@ -66,13 +66,6 @@ function getDashboardUrl(role: UserRole): string {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
-  
-  // Create Supabase client for middleware
-  let response = NextResponse.next({
-    request: {
-      headers: req.headers,
-    },
-  })
 
   const supabase = createSupabaseServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -88,29 +81,9 @@ export async function middleware(req: NextRequest) {
             value,
             ...options,
           })
-          response = NextResponse.next({
-            request: {
-              headers: req.headers,
-            },
-          })
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          })
         },
         remove(name: string, options: CookieOptions) {
           req.cookies.set({
-            name,
-            value: '',
-            ...options,
-          })
-          response = NextResponse.next({
-            request: {
-              headers: req.headers,
-            },
-          })
-          response.cookies.set({
             name,
             value: '',
             ...options,
@@ -119,6 +92,18 @@ export async function middleware(req: NextRequest) {
       },
     }
   )
+
+  // Create the response after Supabase operations, not before
+  let response = NextResponse.next({
+    request: {
+      headers: req.headers,
+    },
+  })
+
+  // Copy all cookies from the request to the response
+  req.cookies.getAll().forEach(cookie => {
+    response.cookies.set(cookie.name, cookie.value)
+  })
 
   // Check authentication - this will automatically refresh the session if needed
   const { data: { user }, error: authError } = await supabase.auth.getUser()
