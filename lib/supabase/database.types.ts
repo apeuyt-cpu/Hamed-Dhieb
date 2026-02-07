@@ -52,6 +52,7 @@ export interface Database {
           website_url: string | null
           primary_color: string | null
           design: any | null
+          qr_design_version_id: string | null
           created_at: string
         }
         Insert: {
@@ -70,6 +71,7 @@ export interface Database {
           website_url?: string | null
           primary_color?: string | null
           design?: any | null
+          qr_design_version_id?: string | null
           created_at?: string
         }
         Update: {
@@ -88,6 +90,7 @@ export interface Database {
           website_url?: string | null
           primary_color?: string | null
           design?: any | null
+          qr_design_version_id?: string | null
           created_at?: string
         }
       }
@@ -192,6 +195,30 @@ export interface Database {
           design_type?: 'normal' | 'custom'
           description?: string | null
           created_at?: string
+        }
+      }
+
+      design_versions: {
+        Row: {
+          id: string
+          business_id: string
+          design: any
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          business_id: string
+          design: any
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          business_id?: string
+          design?: any
+          created_at?: string
+          updated_at?: string
         }
       }
 
