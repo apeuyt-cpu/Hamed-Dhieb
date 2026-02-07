@@ -78,8 +78,8 @@ export default function SignupForm() {
       
       // Verify Supabase is initialized
       if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-        console.error('[Signup] Missing Supabase environment variables')
-        setError('فشل إعداد الخدمات. يرجى المحاولة لاحقاً. (Missing Supabase config)')
+        console.error('[Signup] Missing Supabase environment variables in client')
+        setError('فشل إعداد الخدمات - لم يتم تكوين Supabase. يرجى التواصل مع مسؤول النظام. (Configuration Error: Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY)')
         setLoading(false)
         return
       }
