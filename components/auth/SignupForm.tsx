@@ -75,11 +75,20 @@ export default function SignupForm() {
     try {
       // Debug: log envs to detect missing vars
       console.debug('[Supabase Debug] URL:', process.env.NEXT_PUBLIC_SUPABASE_URL, 'ANON present:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+      
+      // Verify Supabase is initialized
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+        console.error('[Signup] Missing Supabase environment variables')
+        setError('فشل إعداد الخدمات. يرجى المحاولة لاحقاً. (Missing Supabase config)')
+        setLoading(false)
+        return
+      }
 
       // Step 1: Sign up user
       let authData: any = null
       let authError: any = null
       try {
+        console.debug('[Signup] Attempting to sign up with email:', email)
         const result = await supabase.auth.signUp({
           email,
           password,
@@ -93,16 +102,19 @@ export default function SignupForm() {
         })
         authData = result.data
         authError = result.error
-        console.debug('[Supabase Debug] signUp response:', result)
-      } catch (fetchErr) {
-        console.error('[Supabase Debug] signUp fetch error:', fetchErr)
-        setError('Network error أثناء إنشاء الحساب. تحقق من وحدة تحكم الشبكة (Network tab) لتفاصيل أكثر.')
+        console.debug('[Signup] signUp response:', { hasUser: !!result.data?.user, error: result.error })
+      } catch (fetchErr: any) {
+        console.error('[Signup] signUp fetch error:', fetchErr)
+        const errorMsg = fetchErr?.message || fetchErr?.toString() || 'Unknown error'
+        setError(`فشل إنشاء الحساب: ${errorMsg}. تحقق من وحدة تحكم الشبكة (Network tab).`)
         setLoading(false)
         return
       }
 
-      if (authError || !authData.user) {
-        setError(authError?.message || 'فشل إنشاء حساب المستخدم')
+      if (authError || !authData?.user) {
+        const errorMsg = authError?.message || 'فشل إنشاء حساب المستخدم'
+        console.error('[Signup] Auth error:', authError)
+        setError(errorMsg)
         setLoading(false)
         return
       }
@@ -119,108 +131,126 @@ export default function SignupForm() {
 
       // Step 2: Wait for profile trigger
       let profileExists = false
-      for (let i = 0; i < 10; i++) {
-        await new Promise(resolve => setTimeout(resolve, 300))
-        const { data: profile } = await (supabase
-          .from('profiles') as any)
-          .select('user_id')
-          .eq('user_id', userId)
-          .single()
-        
-        if (profile) {
-          profileExists = true
-          break
-        }
-      }
-
-      // Step 3: Ensure profile exists and has email/phone
-      if (!profileExists) {
-        const { error: profileError } = await (supabase
-          .from('profiles') as any)
-          .insert({
-            user_id: userId,
-            email: email.toLowerCase().trim(),
-            phone_number: phoneNumber.trim(),
-            role: 'owner'
-          })
-        
-        if (profileError) {
-          setError('فشل إنشاء الملف الشخصي. يرجى المحاولة مرة أخرى.')
-          setLoading(false)
-          return
-        }
-      } else {
-        // Update both email and phone number if profile exists (might have been created by trigger without these)
-        const { error: updateError } = await (supabase
-          .from('profiles') as any)
-          .update({ 
-            email: email.toLowerCase().trim(),
-            phone_number: phoneNumber.trim()
-          })
-          .eq('user_id', userId)
-        
-        if (updateError) {
-          console.error('Error updating profile:', updateError)
-          // Don't fail the signup if profile update fails, but log it
-        }
-      }
-
-      // Step 4: Create business with 7-day free trial
-      const expirationDate = new Date()
-      expirationDate.setDate(expirationDate.getDate() + 7) // 7 days from now
-      
-      const insertPayload: any = {
-        owner_id: userId,
-        name: businessName,
-        slug: slug,
-        expires_at: expirationDate.toISOString(), // 7-day free trial
-        status: 'active'
-      }
-
-      // If custom design selected, mark flag only; editor opens in admin after login
-
-      const { data: createdBusiness, error: businessError } = await (supabase
-        .from('businesses') as any)
-        .insert(insertPayload)
-        .select('id')
-        .single()
-
-      if (businessError) {
-        if (businessError.code === '23505') {
-          setError('اسم النشاط التجاري مستخدم بالفعل. تم إنشاء الحساب ولكن فشل إعداد النشاط. يرجى المحاولة لاحقاً.')
-        } else {
-          setError(businessError.message || 'فشل إنشاء النشاط التجاري. تم إنشاء حسابك. يرجى إضافة نشاطك من لوحة التحكم.')
-        }
-        setLoading(false)
-        setTimeout(() => {
-          window.location.href = '/admin/menu'
-        }, 2000)
-        return
-      }
-
-      // Create a design_selections row linked to the business so we have a canonical place to store "تصميم" selection and optional description
       try {
-        if (createdBusiness && (createdBusiness as any).id) {
-          const dsPayload: any = {
-            business_id: (createdBusiness as any).id,
-            design_type: designType,
-            description: businessDescription || null
+        for (let i = 0; i < 10; i++) {
+          await new Promise(resolve => setTimeout(resolve, 300))
+          const { data: profile, error: profileError } = await (supabase
+            .from('profiles') as any)
+            .select('user_id')
+            .eq('user_id', userId)
+            .single()
+          
+          if (profile) {
+            profileExists = true
+            break
           }
-
-          const { error: dsError } = await (supabase.from('design_selections') as any).insert(dsPayload)
-          if (dsError) {
-            // Non-fatal: log and continue — admin can correct later
-            console.warn('Failed to insert design_selections row:', dsError)
+          
+          if (profileError && profileError.code !== 'PGRST116') {
+            console.warn('[Signup] Profile query error:', profileError)
           }
         }
       } catch (err) {
-        console.warn('Error creating design_selections row:', err)
+        console.error('[Signup] Error waiting for profile:', err)
       }
 
-      // Success! Redirect to admin menu (will open editor for custom designs)
-      window.location.href = '/admin/menu'
+      // Step 3: Ensure profile exists and has email/phone
+      try {
+        if (!profileExists) {
+          const { error: profileError } = await (supabase
+            .from('profiles') as any)
+            .insert({
+              user_id: userId,
+              email: email.toLowerCase().trim(),
+              phone_number: phoneNumber.trim(),
+              role: 'owner'
+            })
+          
+          if (profileError) {
+            console.error('[Signup] Profile insert error:', profileError)
+            setError('فشل إنشاء الملف الشخصي. يرجى المحاولة مرة أخرى.')
+            setLoading(false)
+            return
+          }
+        } else {
+          // Update both email and phone number if profile exists
+          const { error: updateError } = await (supabase
+            .from('profiles') as any)
+            .update({ 
+              email: email.toLowerCase().trim(),
+              phone_number: phoneNumber.trim()
+            })
+            .eq('user_id', userId)
+          
+          if (updateError) {
+            console.warn('[Signup] Error updating profile:', updateError)
+          }
+        }
+      } catch (err) {
+        console.error('[Signup] Profile creation/update error:', err)
+      }
+
+      // Step 4: Create business with 7-day free trial
+      try {
+        const expirationDate = new Date()
+        expirationDate.setDate(expirationDate.getDate() + 7)
+        
+        const insertPayload: any = {
+          owner_id: userId,
+          name: businessName,
+          slug: slug,
+          expires_at: expirationDate.toISOString(),
+          status: 'active'
+        }
+
+        const { data: createdBusiness, error: businessError } = await (supabase
+          .from('businesses') as any)
+          .insert(insertPayload)
+          .select('id')
+          .single()
+
+        if (businessError) {
+          console.error('[Signup] Business creation error:', businessError)
+          if (businessError.code === '23505') {
+            setError('اسم النشاط التجاري مستخدم بالفعل. تم إنشاء الحساب ولكن فشل إعداد النشاط. يرجى المحاولة لاحقاً.')
+          } else {
+            setError(businessError.message || 'فشل إنشاء النشاط التجاري. تم إنشاء حسابك. يرجى إضافة نشاطك من لوحة التحكم.')
+          }
+          setLoading(false)
+          setTimeout(() => {
+            window.location.href = '/admin/menu'
+          }, 2000)
+          return
+        }
+
+        // Create design_selections row
+        try {
+          if (createdBusiness && (createdBusiness as any).id) {
+            const dsPayload: any = {
+              business_id: (createdBusiness as any).id,
+              design_type: designType,
+              description: businessDescription || null
+            }
+
+            const { error: dsError } = await (supabase.from('design_selections') as any).insert(dsPayload)
+            if (dsError) {
+              console.warn('[Signup] Failed to insert design_selections row:', dsError)
+            }
+          }
+        } catch (err) {
+          console.warn('[Signup] Error creating design_selections row:', err)
+        }
+
+        // Success! Redirect to admin menu
+        console.log('[Signup] User signup completed successfully')
+        window.location.href = '/admin/menu'
+      } catch (err: any) {
+        console.error('[Signup] Business creation step error:', err)
+        setError(err?.message || 'حدث خطأ أثناء إنشاء النشاط التجاري. يرجى المحاولة مرة أخرى.')
+        setLoading(false)
+      }
     } catch (err: any) {
-      setError(err.message || 'حدث خطأ. يرجى المحاولة مرة أخرى.')
+      console.error('[Signup] Outer catch error:', err)
+      setError(err?.message || 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.')
       setLoading(false)
     }
   }

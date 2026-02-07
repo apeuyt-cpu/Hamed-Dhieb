@@ -68,7 +68,16 @@ export async function middleware(req: NextRequest) {
   try {
     const { pathname } = req.nextUrl
 
-    // No-op response - just pass through without modifying
+    // Public routes - allow without any processing
+    if (isPublicRoute(pathname)) {
+      return NextResponse.next({
+        request: {
+          headers: req.headers,
+        },
+      })
+    }
+
+    // For protected routes, continue with auth logic
     const response = NextResponse.next({
       request: {
         headers: req.headers,
@@ -76,16 +85,13 @@ export async function middleware(req: NextRequest) {
     })
 
     try {
-      // Check environment variables early
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
       const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
       if (!supabaseUrl || !supabaseKey) {
-        // Missing env vars - just return, don't interfere with page loads
         return response
       }
 
-      // Create Supabase client with comprehensive error handling
       const supabase = createSupabaseServerClient(
         supabaseUrl,
         supabaseKey,
@@ -116,54 +122,33 @@ export async function middleware(req: NextRequest) {
         }
       )
 
-      // Get user with timeout protection
+      // Get user
       let user = null
-      let authError = null
       try {
-        const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 5000)
-
-        try {
-          const result = await supabase.auth.getUser()
-          clearTimeout(timeout)
-          user = result.data?.user || null
-          authError = result.error
-        } catch (e) {
-          clearTimeout(timeout)
-          throw e
-        }
+        const result = await supabase.auth.getUser()
+        user = result.data?.user || null
       } catch (e) {
         console.error('[Middleware] Auth check error:', e)
-        authError = e
-      }
-
-      // Public routes - allow without auth
-      if (isPublicRoute(pathname)) {
         return response
       }
 
-      // For protected routes, redirect unauthenticated users
-      if (!user || authError) {
-        if (pathname !== '/login' && pathname !== '/signup') {
-          const redirectUrl = req.nextUrl.clone()
-          redirectUrl.pathname = '/login'
-          return NextResponse.redirect(redirectUrl)
-        }
-        return response
+      if (!user) {
+        const redirectUrl = req.nextUrl.clone()
+        redirectUrl.pathname = '/login'
+        return NextResponse.redirect(redirectUrl)
       }
 
-      // User is authenticated - check role for protected routes
+      // User is authenticated - check role
       try {
-        let userRole: UserRole = null
         const { data: profile } = await supabase
           .from('profiles')
           .select('role')
           .eq('user_id', user.id)
           .maybeSingle()
 
-        userRole = (profile?.role as UserRole) || null
+        const userRole = (profile?.role as UserRole) || null
 
-        // If on login/signup when authenticated, redirect to dashboard
+        // Redirect authenticated users away from login/signup
         if (pathname === '/login' || pathname === '/signup') {
           const dashboardUrl = getDashboardUrl(userRole)
           const redirectUrl = req.nextUrl.clone()
@@ -172,12 +157,10 @@ export async function middleware(req: NextRequest) {
         }
 
         // Protect /admin - only owners
-        if (pathname.startsWith('/admin')) {
-          if (userRole !== 'owner') {
-            const redirectUrl = req.nextUrl.clone()
-            redirectUrl.pathname = userRole === 'super_admin' ? '/super-admin' : '/login'
-            return NextResponse.redirect(redirectUrl, 307)
-          }
+        if (pathname.startsWith('/admin') && userRole !== 'owner') {
+          const redirectUrl = req.nextUrl.clone()
+          redirectUrl.pathname = userRole === 'super_admin' ? '/super-admin' : '/login'
+          return NextResponse.redirect(redirectUrl, 307)
         }
 
         // Protect /super-admin - only super_admin
@@ -195,22 +178,15 @@ export async function middleware(req: NextRequest) {
         }
       } catch (e) {
         console.error('[Middleware] Role check error:', e)
-        // On error, just allow the request to proceed
       }
 
       return response
     } catch (innerError) {
       console.error('[Middleware] Inner error:', innerError)
-      // Return safe response on any error
-      return NextResponse.next({
-        request: {
-          headers: req.headers,
-        },
-      })
+      return response
     }
   } catch (error) {
     console.error('[Middleware] Unhandled error:', error)
-    // Last resort - return minimal next response
     return NextResponse.next()
   }
 }
