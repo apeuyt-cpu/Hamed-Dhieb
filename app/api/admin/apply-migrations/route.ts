@@ -12,27 +12,37 @@ export async function GET() {
   try {
     const { user, profile } = await requireSuperAdmin()
     
-    // Check if migration file exists
-    const migrationPath = path.join(process.cwd(), 'sql/2026-02-06_create_design_versions_table.sql')
-    const exists = fs.existsSync(migrationPath)
+    // Check for the latest migration files
+    const migrations = [
+      {
+        file: 'sql/2026-02-06_create_design_versions_table.sql',
+        description: 'Creates design_versions table for managing design versions per business'
+      },
+      {
+        file: 'sql/2026-02-07_add_qr_design_version_to_businesses.sql',
+        description: 'Adds qr_design_version_id column to businesses table'
+      }
+    ]
     
-    if (!exists) {
+    const pendingMigrations = migrations
+      .filter(m => fs.existsSync(path.join(process.cwd(), m.file)))
+      .map(m => ({
+        ...m,
+        content: fs.readFileSync(path.join(process.cwd(), m.file), 'utf-8')
+      }))
+    
+    if (pendingMigrations.length === 0) {
       return NextResponse.json({ 
         status: 'error',
-        message: 'Migration file not found' 
+        message: 'No migration files found' 
       }, { status: 404 })
     }
     
-    const sqlContent = fs.readFileSync(migrationPath, 'utf-8')
-    
     return NextResponse.json({
       status: 'pending',
-      migration: '2026-02-06_create_design_versions_table',
-      table: 'design_versions',
-      description: 'Creates design_versions table for managing design versions per business',
-      sql: sqlContent,
+      pendingMigrations: pendingMigrations,
       instructions: {
-        manual: 'Use GET to retrieve SQL, then apply via Supabase Dashboard or POST to apply programmatically'
+        manual: 'Use POST to apply migrations, or copy SQL from above and run in Supabase Dashboard'
       }
     })
   } catch (err: any) {
@@ -47,102 +57,86 @@ export async function POST() {
   try {
     const { user, profile } = await requireSuperAdmin()
     
-    const migrationPath = path.join(process.cwd(), 'sql/2026-02-06_create_design_versions_table.sql')
-    if (!fs.existsSync(migrationPath)) {
-      return NextResponse.json({ 
-        error: 'Migration file not found',
-        status: 'file_not_found'
-      }, { status: 404 })
-    }
+    // List of migration files to apply (in order)
+    const migrationFiles = [
+      'sql/2026-02-06_create_design_versions_table.sql',
+      'sql/2026-02-07_add_qr_design_version_to_businesses.sql'
+    ]
     
-    const sqlContent = fs.readFileSync(migrationPath, 'utf-8')
+    const appliedMigrations = []
+    const failedMigrations = []
     
-    // Create a service role client to execute SQL
-    const supabase = await createServiceRoleClient()
-    
-    // Split SQL into individual statements and execute them
-    // We'll use the exec_sql RPC function if it exists, otherwise create it
-    try {
-      // Try direct execution via RPC
-      const { error: rpcError, data: rpcData } = await (supabase as any).rpc('exec_sql', {
-        sql: sqlContent
-      })
+    for (const migrationFile of migrationFiles) {
+      const migrationPath = path.join(process.cwd(), migrationFile)
       
-      if (rpcError && rpcError.code !== '42883') { // 42883 = function doesn't exist
-        throw rpcError
+      if (!fs.existsSync(migrationPath)) {
+        continue // Skip if file doesn't exist
       }
       
-      // If function doesn't exist, try a different approach
-      if (rpcError?.code === '42883') {
-        // Execute statements individually
-        const statements = sqlContent
-          .split(';')
-          .map(s => s.trim())
-          .filter(s => s.length > 0 && !s.startsWith('--'))
+      const sqlContent = fs.readFileSync(migrationPath, 'utf-8')
+      
+      try {
+        // Create a service role client to execute SQL
+        const supabase = await createServiceRoleClient()
         
-        // Create the extension
-        const { error: extError } = await (supabase as any).rpc('exec', {
-          sql: 'CREATE EXTENSION IF NOT EXISTS "pgcrypto"'
-        }).catch(() => ({ error: null })) // Ignore if function doesn't exist
+        // Try to execute via RPC
+        const { error: rpcError } = await (supabase as any).rpc('exec_sql', {
+          sql: sqlContent
+        })
         
-        // Execute create table statement
-        const createTableStmt = statements
-          .find(s => s.toUpperCase().startsWith('CREATE TABLE'))
-        
-        if (createTableStmt) {
-          const { error: createError } = await (supabase as any).rpc('exec', {
-            sql: createTableStmt
-          }).catch(() => ({ error: null }))
+        if (rpcError && rpcError.code !== '42883') {
+          throw rpcError
         }
         
-        throw new Error('SQL execution requires Supabase dashboard or CLI. Please use the manual instructions below.')
+        appliedMigrations.push(migrationFile)
+      } catch (sqlError: any) {
+        failedMigrations.push({
+          file: migrationFile,
+          sql: sqlContent,
+          error: sqlError.message
+        })
       }
-      
-      return NextResponse.json({
-        success: true,
-        message: 'Migration applied successfully',
-        migration: '2026-02-06_create_design_versions_table',
-        status: 'completed'
-      })
-    } catch (sqlError: any) {
-      // If direct execution fails, provide detailed instructions
+    }
+    
+    // If there are failed migrations, provide instructions
+    if (failedMigrations.length > 0) {
       return NextResponse.json({
         status: 'manual_application_required',
-        error: sqlError.message || 'Database SQL execution not available through API',
-        message: 'Please apply the migration using one of these methods:',
-        sql: sqlContent,
-        methods: {
+        message: 'Some migrations require manual execution',
+        appliedMigrations,
+        pendingMigrations: failedMigrations.map(m => ({
+          file: m.file,
+          sql: m.sql,
+          error: m.error
+        })),
+        instructions: {
           'Supabase Dashboard': {
             steps: [
-              'Open https://app.supabase.com in your browser',
-              'Select your project',
-              'Go to SQL Editor',
-              'Click "Create a new query"',
-              'Copy and paste the SQL from the "sql" field above',
-              'Click "Run"',
-              'Wait for success message'
+              '1. Open https://app.supabase.com in your browser',
+              '2. Select your project (ywgunhtmprxaxlwvnkme)',
+              '3. Go to SQL Editor in the left sidebar',
+              '4. Click "Create a new query"',
+              '5. Copy each SQL statement below and paste it',
+              '6. Click "Run" after each statement',
+              '7. Wait for success message'
             ],
-            difficulty: 'Easy'
-          },
-          'Supabase CLI': {
-            command: 'supabase db push sql/2026-02-06_create_design_versions_table.sql',
-            requires: 'Supabase CLI installed and authenticated',
-            difficulty: 'Medium'
-          },
-          'psql CLI': {
-            command: 'psql "<SUPABASE_CONNECTION_URL>" -f sql/2026-02-06_create_design_versions_table.sql',
-            requires: 'PostgreSQL client installed',
-            difficulty: 'Medium'
+            difficulty: 'Easy - Recommended'
           }
         }
       }, { status: 400 })
     }
+    
+    return NextResponse.json({
+      status: 'success',
+      message: 'All migrations applied successfully',
+      appliedMigrations
+    })
   } catch (err: any) {
     if (err?.digest?.startsWith('NEXT_REDIRECT')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     return NextResponse.json({ 
-      error: err.message || 'Failed to apply migration',
+      error: err.message || 'Failed to apply migrations',
       status: 'error'
     }, { status: 500 })
   }
